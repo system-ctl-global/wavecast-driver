@@ -99,6 +99,15 @@ kPlugIn_Icon='\"WaveCast.icns\"' \
 kSampleRates=48000" \
     2>&1 | grep -E "^(Build|CompileC|error:|warning:)" || true
 
+# The pipe above swallows xcodebuild's exit code, so confirm the bundle exists
+# before continuing — otherwise later steps fail with misleading errors.
+if [ ! -d "$BUILD_DIR/BlackHole.driver" ]; then
+    echo "ERROR: xcodebuild did not produce BlackHole.driver."
+    echo "Full Xcode (not just Command Line Tools) is required. Install it, then:"
+    echo "  sudo xcode-select -s /Applications/Xcode.app"
+    exit 1
+fi
+
 echo
 echo "Patching factory UUID in Info.plist…"
 
