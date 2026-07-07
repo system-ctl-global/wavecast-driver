@@ -1,0 +1,323 @@
+#!/usr/bin/env bash
+# build_driver.sh — Build and rebrand BlackHole as WaveCast 2Ch driver.
+#
+# Run from the repo root:
+#   ./Packaging/build_driver.sh
+#
+# Output: Packaging/WaveCast2Ch.driver  (ready to embed in the app bundle)
+#
+# Prerequisites:
+#   - Xcode command-line tools installed
+#   - Vendor/BlackHole submodule initialised:
+#       git submodule update --init Vendor/BlackHole
+#   - A valid Developer ID code-signing identity in your keychain.
+#     Set SIGN_IDENTITY below, or pass it as an env var:
+#       SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./Packaging/build_driver.sh
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BLACKHOLE_PROJ="$REPO_ROOT/Vendor/BlackHole/BlackHole.xcodeproj"
+PACKAGING_DIR="$REPO_ROOT/Packaging"
+UUID_FILE="$PACKAGING_DIR/wavecast2ch.uuid"
+ICON_FILE="$PACKAGING_DIR/WaveCast.icns"
+OUT_DRIVER="$PACKAGING_DIR/WaveCast2Ch.driver"
+BUILD_DIR="$PACKAGING_DIR/_build"
+
+# ── Identity ────────────────────────────────────────────────────────────────
+# Set to "-" to ad-hoc sign (no Notarization, local testing only).
+SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+
+# PKG signing requires a "Developer ID Installer" identity — different from the
+# "Developer ID Application" identity used for the driver binary.
+# Leave empty (default) for an unsigned PKG, which is fine for local testing.
+# For distribution: PKG_SIGN_IDENTITY="Developer ID Installer: Your Name (TEAMID)"
+PKG_SIGN_IDENTITY="${PKG_SIGN_IDENTITY:-}"
+
+# ── WaveCast-specific defines ────────────────────────────────────────────────
+DRIVER_NAME="WaveCast"
+CHANNELS=2
+BUNDLE_ID="com.wavecast.driver.2ch"
+
+# GPL-3.0 corresponding-source location (§6(d)). The public repo MUST host the
+# exact BlackHole commit shipped below plus this build_driver.sh, and MUST stay
+# reachable for as long as the driver binary is distributed.
+# Publish/update it with: ./Packaging/publish_driver_source.sh
+SOURCE_URL="https://github.com/system-ctl-global/wavecast-driver-src"
+
+# ── Validate ─────────────────────────────────────────────────────────────────
+if [ ! -f "$BLACKHOLE_PROJ/project.pbxproj" ]; then
+    echo "ERROR: BlackHole submodule not initialised."
+    echo "Run: git submodule update --init Vendor/BlackHole"
+    exit 1
+fi
+
+if [ ! -f "$UUID_FILE" ]; then
+    echo "ERROR: $UUID_FILE missing."
+    exit 1
+fi
+
+if [ ! -f "$ICON_FILE" ]; then
+    echo "ERROR: $ICON_FILE missing. Regenerate with:"
+    echo "  iconutil -c icns Packaging/Assets/WaveCast.iconset -o Packaging/WaveCast.icns"
+    exit 1
+fi
+
+FACTORY_UUID="$(tr -d '[:space:]' < "$UUID_FILE")"
+echo "Driver:  $DRIVER_NAME ${CHANNELS}ch"
+echo "Bundle:  $BUNDLE_ID"
+echo "UUID:    $FACTORY_UUID"
+echo
+
+# ── Build ─────────────────────────────────────────────────────────────────────
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+
+# GCC_PREPROCESSOR_DEFINITIONS overrides let us rebrand without touching source.
+# kDriver_Name  → device appears as "WaveCast 2ch" in macOS
+# kPlugIn_BundleID → bundle identifier baked into the driver binary
+# kNumber_Of_Channels → 2 (stereo)
+#
+# CODE_SIGN_IDENTITY="" + CODE_SIGNING_REQUIRED=NO skips Xcode's built-in signing
+# so we can sign with our own identity immediately after the build.
+xcodebuild \
+    -project "$BLACKHOLE_PROJ" \
+    -target BlackHole \
+    -configuration Release \
+    CONFIGURATION_BUILD_DIR="$BUILD_DIR" \
+    PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+    CODE_SIGN_IDENTITY="" \
+    CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGNING_ALLOWED=NO \
+    GCC_PREPROCESSOR_DEFINITIONS="\
+\$(inherited) \
+DEBUG=0 \
+kNumber_Of_Channels=$CHANNELS \
+kPlugIn_BundleID='\"$BUNDLE_ID\"' \
+kDriver_Name='\"$DRIVER_NAME\"' \
+kPlugIn_Icon='\"WaveCast.icns\"' \
+kSampleRates=48000" \
+    2>&1 | grep -E "^(Build|CompileC|error:|warning:)" || true
+
+echo
+echo "Patching factory UUID in Info.plist…"
+
+# The BlackHole placeholder UUID e395c745-… lives only in the compiled plist.
+# Replace it with our project-specific UUID so we never collide with BlackHole
+# or RIME (which ships the same placeholder UUID).
+PLACEHOLDER="e395c745-4eea-4d94-bb92-46224221047c"
+PLIST="$BUILD_DIR/BlackHole.driver/Contents/Info.plist"
+
+if ! grep -q "$PLACEHOLDER" "$PLIST"; then
+    echo "ERROR: Placeholder UUID not found in built plist. Check BlackHole version."
+    exit 1
+fi
+
+sed -i '' "s/$PLACEHOLDER/$FACTORY_UUID/g" "$PLIST"
+
+echo "Injecting WaveCast icon…"
+RESOURCES="$BUILD_DIR/BlackHole.driver/Contents/Resources"
+# Remove BlackHole's icon; add ours under the name the driver binary looks for.
+rm -f "$RESOURCES/BlackHole.icns"
+cp "$ICON_FILE" "$RESOURCES/WaveCast.icns"
+# Also set CFBundleIconFile in the plist — Audio MIDI Setup reads the icon
+# from here directly, not via the kAudioDevicePropertyIcon Core Audio property.
+/usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string WaveCast" "$PLIST"
+
+# ── GPL-3.0 compliance NOTICE ──────────────────────────────────────────────────
+# The shipped binary is a modified version of BlackHole (GPL-3.0). GPL §5(a)
+# requires a prominent notice of the changes and their date; §6 requires the
+# corresponding source be available. Both live in the bundle Resources, next to
+# the verbatim GPL-3.0 LICENSE that BlackHole already ships.
+echo "Writing GPL-3.0 NOTICE…"
+BH_COMMIT="$(git -C "$REPO_ROOT/Vendor/BlackHole" rev-parse HEAD 2>/dev/null \
+    || cat "$REPO_ROOT/Vendor/BlackHole/.wavecast-commit" 2>/dev/null \
+    || echo unknown)"
+BH_VERSION="$(cat "$RESOURCES/VERSION" 2>/dev/null || echo "unknown")"
+BUILD_DATE="$(date -u +%Y-%m-%d)"
+
+cat > "$RESOURCES/NOTICE.txt" << NOTICE
+WaveCast ${CHANNELS}ch virtual audio driver
+============================================
+
+This driver is a MODIFIED version of BlackHole, a virtual audio loopback
+driver by Existential Audio Inc.
+
+  Upstream:  https://github.com/ExistentialAudio/BlackHole
+  Based on:  BlackHole ${BH_VERSION} (commit ${BH_COMMIT})
+
+BlackHole is free software licensed under the GNU General Public License,
+version 3. A verbatim copy of that license is included alongside this file
+as "LICENSE". This modified version is likewise distributed under GPL-3.0.
+
+Modifications made by WaveCast (last changed ${BUILD_DATE})
+----------------------------------------------------------
+The source files themselves are unmodified; the following changes are applied
+at build time via compiler defines and Info.plist edits (see build_driver.sh
+in the corresponding source):
+
+  * Device / driver display name set to "WaveCast ${CHANNELS}ch".
+  * Bundle identifier set to "${BUNDLE_ID}".
+  * Channel count fixed at ${CHANNELS} (stereo).
+  * Nominal sample rate locked to 48000 Hz (kSampleRates).
+  * Bundle icon replaced with the WaveCast icon.
+  * CoreAudio plug-in factory UUID replaced with a WaveCast-specific UUID.
+
+Corresponding source (GPL-3.0 §6)
+---------------------------------
+The complete corresponding source for this driver — the exact BlackHole
+commit above plus the build script that produces this binary — is available
+at:
+
+  ${SOURCE_URL}
+
+The WaveCast application that uses this driver is a separate, independent
+program. It communicates with this driver only through the public Core Audio
+HAL API and is not a derivative work of BlackHole.
+NOTICE
+
+# ── Sign ──────────────────────────────────────────────────────────────────────
+echo "Signing with: $SIGN_IDENTITY"
+# A secure timestamp is required for notarization, but ad-hoc signing ("-")
+# cannot contact Apple's timestamp server — only add it for a real identity.
+if [ "$SIGN_IDENTITY" = "-" ]; then
+    codesign \
+        --force \
+        --deep \
+        --options runtime \
+        --sign "$SIGN_IDENTITY" \
+        "$BUILD_DIR/BlackHole.driver"
+else
+    codesign \
+        --force \
+        --deep \
+        --options runtime \
+        --timestamp \
+        --sign "$SIGN_IDENTITY" \
+        "$BUILD_DIR/BlackHole.driver"
+fi
+
+# ── Output ────────────────────────────────────────────────────────────────────
+rm -rf "$OUT_DRIVER"
+mv "$BUILD_DIR/BlackHole.driver" "$OUT_DRIVER"
+rm -rf "$BUILD_DIR"
+
+echo
+echo "Done: $OUT_DRIVER"
+echo
+echo "Verify UUID in output plist:"
+/usr/libexec/PlistBuddy -c "Print :CFPlugInFactories" "$OUT_DRIVER/Contents/Info.plist"
+
+# ── PKG installer ─────────────────────────────────────────────────────────────
+echo
+echo "Building installer PKG…"
+
+PKG_STAGING="$PACKAGING_DIR/_pkg_staging"
+PKG_SCRIPTS="$PACKAGING_DIR/_pkg_scripts"
+COMPONENT_PKG="$PACKAGING_DIR/_WaveCastDriverComponent.pkg"
+FINAL_PKG="$PACKAGING_DIR/WaveCastDriver.pkg"
+
+rm -rf "$PKG_STAGING" "$PKG_SCRIPTS" "$COMPONENT_PKG"
+mkdir -p "$PKG_STAGING/Library/Audio/Plug-Ins/HAL"
+mkdir -p "$PKG_SCRIPTS"
+
+cp -R "$OUT_DRIVER" "$PKG_STAGING/Library/Audio/Plug-Ins/HAL/"
+
+# postinstall: restart coreaudiod so the new driver loads without a reboot.
+cat > "$PKG_SCRIPTS/postinstall" << 'POSTINSTALL'
+#!/bin/bash
+launchctl kickstart -k system/com.apple.audio.coreaudiod 2>/dev/null || true
+exit 0
+POSTINSTALL
+chmod +x "$PKG_SCRIPTS/postinstall"
+
+# Component package (flat, contains the payload + postinstall script).
+if [ -n "$PKG_SIGN_IDENTITY" ]; then
+    pkgbuild \
+        --root "$PKG_STAGING" \
+        --scripts "$PKG_SCRIPTS" \
+        --identifier "com.wavecast.driver.2ch.pkg" \
+        --version "1.0" \
+        --sign "$PKG_SIGN_IDENTITY" \
+        "$COMPONENT_PKG"
+else
+    pkgbuild \
+        --root "$PKG_STAGING" \
+        --scripts "$PKG_SCRIPTS" \
+        --identifier "com.wavecast.driver.2ch.pkg" \
+        --version "1.0" \
+        "$COMPONENT_PKG"
+fi
+
+# Distribution package — custom XML sets the Installer.app title and sidebar
+# background image (the icon shown in the left panel of Installer.app).
+PKG_RESOURCES="$PACKAGING_DIR/_pkg_resources"
+DIST_XML="$PACKAGING_DIR/_distribution.xml"
+COMPONENT_BASENAME="$(basename "$COMPONENT_PKG")"
+
+mkdir -p "$PKG_RESOURCES"
+# Resize to 120×120 so it fits the ~150px-wide Installer.app sidebar without
+# overflowing. scaling="none" in the XML renders it at exactly this size.
+sips -z 120 120 "$REPO_ROOT/Packaging/Assets/wavecast_icon.png" \
+    --out "$PKG_RESOURCES/wavecast_icon.png" > /dev/null
+
+# GPL-3.0 licence pane: Installer.app shows this and requires agreement before
+# the modified BlackHole binary is installed. Prepend the WaveCast NOTICE so the
+# modification + corresponding-source disclosure is seen up front.
+DRIVER_RES="$OUT_DRIVER/Contents/Resources"
+cat "$DRIVER_RES/NOTICE.txt" - "$DRIVER_RES/LICENSE" > "$PKG_RESOURCES/LICENSE.txt" << 'SEP'
+
+--------------------------------------------------------------------------------
+                    GNU GENERAL PUBLIC LICENSE, VERSION 3
+--------------------------------------------------------------------------------
+
+SEP
+
+cat > "$DIST_XML" << EOF
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>WaveCast Audio Driver</title>
+    <background file="wavecast_icon.png" mime-type="image/png"
+                alignment="bottomleft" scaling="none"/>
+    <background-darkAqua file="wavecast_icon.png" mime-type="image/png"
+                         alignment="bottomleft" scaling="none"/>
+    <license file="LICENSE.txt" mime-type="text/plain"/>
+    <options customize="never" require-scripts="false" rootVolumeOnly="true"/>
+    <choices-outline>
+        <line choice="default">
+            <line choice="com.wavecast.driver.2ch.pkg"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="com.wavecast.driver.2ch.pkg" visible="false">
+        <pkg-ref id="com.wavecast.driver.2ch.pkg"/>
+    </choice>
+    <pkg-ref id="com.wavecast.driver.2ch.pkg" version="1.0" onConclusion="none">$COMPONENT_BASENAME</pkg-ref>
+</installer-gui-script>
+EOF
+
+if [ -n "$PKG_SIGN_IDENTITY" ]; then
+    productbuild \
+        --distribution "$DIST_XML" \
+        --resources "$PKG_RESOURCES" \
+        --package-path "$PACKAGING_DIR" \
+        --sign "$PKG_SIGN_IDENTITY" \
+        "$FINAL_PKG"
+else
+    productbuild \
+        --distribution "$DIST_XML" \
+        --resources "$PKG_RESOURCES" \
+        --package-path "$PACKAGING_DIR" \
+        "$FINAL_PKG"
+fi
+
+rm -rf "$PKG_STAGING" "$PKG_SCRIPTS" "$COMPONENT_PKG" "$PKG_RESOURCES" "$DIST_XML"
+
+# Copy PKG and icon into the Xcode source tree — both are auto-included as
+# bundle resources by Xcode 16's synchronized root group.
+cp "$FINAL_PKG" "$REPO_ROOT/WaveCast/WaveCastDriver.pkg"
+cp "$REPO_ROOT/Packaging/Assets/wavecast_icon.png" "$REPO_ROOT/WaveCast/wavecast_icon.png"
+
+echo "Done: $FINAL_PKG"
+echo "Bundled: $REPO_ROOT/WaveCast/WaveCastDriver.pkg"
+echo "Icon:    $REPO_ROOT/WaveCast/wavecast_icon.png"
