@@ -237,9 +237,16 @@ mkdir -p "$PKG_SCRIPTS"
 cp -R "$OUT_DRIVER" "$PKG_STAGING/Library/Audio/Plug-Ins/HAL/"
 
 # postinstall: restart coreaudiod so the new driver loads without a reboot.
+# `launchctl kickstart -k coreaudiod` is SIP-blocked on macOS 26+ ("Operation
+# not permitted while System Integrity Protection is engaged"), so the driver
+# would install but never load. `killall coreaudiod` is allowed and launchd
+# respawns it, reloading HAL plugins. Keep kickstart as a fallback for older
+# macOS. If both fail the driver still loads on next reboot.
 cat > "$PKG_SCRIPTS/postinstall" << 'POSTINSTALL'
 #!/bin/bash
-launchctl kickstart -k system/com.apple.audio.coreaudiod 2>/dev/null || true
+killall coreaudiod 2>/dev/null \
+    || launchctl kickstart -k system/com.apple.audio.coreaudiod 2>/dev/null \
+    || true
 exit 0
 POSTINSTALL
 chmod +x "$PKG_SCRIPTS/postinstall"
