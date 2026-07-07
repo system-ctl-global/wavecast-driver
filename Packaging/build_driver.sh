@@ -43,7 +43,7 @@ BUNDLE_ID="com.wavecast.driver.2ch"
 # exact BlackHole commit shipped below plus this build_driver.sh, and MUST stay
 # reachable for as long as the driver binary is distributed.
 # Publish/update it with: ./Packaging/publish_driver_source.sh
-SOURCE_URL="https://github.com/system-ctl-global/wavecast-driver-src"
+SOURCE_URL="https://github.com/system-ctl-global/wavecast-driver"
 
 # ── Validate ─────────────────────────────────────────────────────────────────
 if [ ! -f "$BLACKHOLE_PROJ/project.pbxproj" ]; then
@@ -313,11 +313,21 @@ fi
 
 rm -rf "$PKG_STAGING" "$PKG_SCRIPTS" "$COMPONENT_PKG" "$PKG_RESOURCES" "$DIST_XML"
 
-# Copy PKG and icon into the Xcode source tree — both are auto-included as
-# bundle resources by Xcode 16's synchronized root group.
-cp "$FINAL_PKG" "$REPO_ROOT/WaveCast/WaveCastDriver.pkg"
-cp "$REPO_ROOT/Packaging/Assets/wavecast_icon.png" "$REPO_ROOT/WaveCast/wavecast_icon.png"
+# Copy PKG and icon into the consuming app's source tree — both are auto-included
+# as bundle resources by Xcode 16's synchronized root group. When this repo is
+# used standalone (its own corresponding source), there is no app tree, so the
+# destination is opt-in: set APP_BUNDLE_RES_DIR to the app's resource folder.
+# The main WaveCast repo consumes this driver as a submodule and passes
+# APP_BUNDLE_RES_DIR=<main>/WaveCast.
+APP_BUNDLE_RES_DIR="${APP_BUNDLE_RES_DIR:-}"
 
 echo "Done: $FINAL_PKG"
-echo "Bundled: $REPO_ROOT/WaveCast/WaveCastDriver.pkg"
-echo "Icon:    $REPO_ROOT/WaveCast/wavecast_icon.png"
+if [ -n "$APP_BUNDLE_RES_DIR" ]; then
+    mkdir -p "$APP_BUNDLE_RES_DIR"
+    cp "$FINAL_PKG" "$APP_BUNDLE_RES_DIR/WaveCastDriver.pkg"
+    cp "$PACKAGING_DIR/Assets/wavecast_icon.png" "$APP_BUNDLE_RES_DIR/wavecast_icon.png"
+    echo "Bundled: $APP_BUNDLE_RES_DIR/WaveCastDriver.pkg"
+    echo "Icon:    $APP_BUNDLE_RES_DIR/wavecast_icon.png"
+else
+    echo "(APP_BUNDLE_RES_DIR unset — skipped copy into app tree)"
+fi
