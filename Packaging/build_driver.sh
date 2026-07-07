@@ -276,9 +276,34 @@ DIST_XML="$PACKAGING_DIR/_distribution.xml"
 COMPONENT_BASENAME="$(basename "$COMPONENT_PKG")"
 
 mkdir -p "$PKG_RESOURCES"
-# Resize to 120×120 so it fits the ~150px-wide Installer.app sidebar without
-# overflowing. scaling="none" in the XML renders it at exactly this size.
-sips -z 120 120 "$REPO_ROOT/Packaging/Assets/wavecast_icon.png" \
+# The Installer.app sidebar image is pinned bottom-left with scaling="none" and
+# the <background> element has no margin attribute, so a bare icon sits flush in
+# the corner. Bake a transparent margin into the image itself: a 120px icon
+# centred on a 168px canvas leaves a 24px inset from the left/bottom edges,
+# aligning it with the installer's text and buttons.
+PAD_SWIFT="$PKG_RESOURCES/_pad_icon.swift"
+cat > "$PAD_SWIFT" << 'PADSWIFT'
+import AppKit
+let icon: CGFloat = 120, margin: CGFloat = 24
+let side = icon + margin * 2
+let src = NSImage(contentsOfFile: CommandLine.arguments[1])!
+let out = NSImage(size: NSSize(width: side, height: side))
+out.lockFocus()
+src.draw(in: NSRect(x: margin, y: margin, width: icon, height: icon),
+         from: .zero, operation: .sourceOver, fraction: 1.0)
+out.unlockFocus()
+let rep = NSBitmapImageRep(data: out.tiffRepresentation!)!
+try! rep.representation(using: .png, properties: [:])!
+    .write(to: URL(fileURLWithPath: CommandLine.arguments[2]))
+PADSWIFT
+swiftc "$PAD_SWIFT" -o "$PKG_RESOURCES/_pad_icon"
+"$PKG_RESOURCES/_pad_icon" \
+    "$REPO_ROOT/Packaging/Assets/wavecast_icon.png" \
+    "$PKG_RESOURCES/wavecast_icon.png"
+rm -f "$PAD_SWIFT" "$PKG_RESOURCES/_pad_icon"
+# lockFocus renders at 2x backing; force exact 168px so scaling="none" doesn't
+# blow the image up to 336px and overflow the sidebar.
+sips -z 168 168 "$PKG_RESOURCES/wavecast_icon.png" \
     --out "$PKG_RESOURCES/wavecast_icon.png" > /dev/null
 
 # GPL-3.0 licence pane: Installer.app shows this and requires agreement before
