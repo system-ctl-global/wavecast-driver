@@ -139,12 +139,12 @@ cp "$ICON_FILE" "$RESOURCES/WaveCast.icns"
 # corresponding source be available. Both live in the bundle Resources, next to
 # the verbatim GPL-3.0 LICENSE that BlackHole already ships.
 echo "Writing GPL-3.0 NOTICE…"
-# .wavecast-commit records the exact upstream BlackHole commit this source was
-# vendored from — it is authoritative. Fall back to `git rev-parse` only when it
-# is absent (BlackHole checked out as its own repo), since in the vendored layout
-# BlackHole is a plain subdir and rev-parse would return THIS repo's HEAD instead.
-BH_COMMIT="$(cat "$REPO_ROOT/Vendor/BlackHole/.wavecast-commit" 2>/dev/null \
-    || git -C "$REPO_ROOT/Vendor/BlackHole" rev-parse HEAD 2>/dev/null \
+# Vendor/BlackHole is a git submodule pinned to our fork
+# (github.com/system-ctl-global/BlackHole). The pinned commit IS the authoritative
+# provenance, so read it directly. The legacy .wavecast-commit fallback covers a
+# tarball export where the .git link is absent.
+BH_COMMIT="$(git -C "$REPO_ROOT/Vendor/BlackHole" rev-parse HEAD 2>/dev/null \
+    || cat "$REPO_ROOT/Vendor/BlackHole/.wavecast-commit" 2>/dev/null \
     || echo unknown)"
 BH_VERSION="$(cat "$RESOURCES/VERSION" 2>/dev/null || echo "unknown")"
 BUILD_DATE="$(date -u +%Y-%m-%d)"
