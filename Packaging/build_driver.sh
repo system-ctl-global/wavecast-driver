@@ -19,7 +19,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BLACKHOLE_PROJ="$REPO_ROOT/Vendor/BlackHole/BlackHole.xcodeproj"
 PACKAGING_DIR="$REPO_ROOT/Packaging"
-UUID_FILE="$PACKAGING_DIR/wavecast2ch.uuid"
+UUID_FILE="$PACKAGING_DIR/wavecast.uuid"
 ICON_FILE="$PACKAGING_DIR/WaveCast.icns"
 OUT_DRIVER="$PACKAGING_DIR/WaveCast.driver"
 BUILD_DIR="$PACKAGING_DIR/_build"
