@@ -85,6 +85,9 @@ xcodebuild \
     -target BlackHole \
     -configuration Release \
     CONFIGURATION_BUILD_DIR="$BUILD_DIR" \
+    SYMROOT="$BUILD_DIR" \
+    OBJROOT="$BUILD_DIR" \
+    -derivedDataPath "$BUILD_DIR/DerivedData" \
     PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
     CODE_SIGN_IDENTITY="" \
     CODE_SIGNING_REQUIRED=NO \
