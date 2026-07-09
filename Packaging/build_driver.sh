@@ -149,45 +149,22 @@ BH_COMMIT="$(cat "$REPO_ROOT/Vendor/BlackHole/.wavecast-commit" 2>/dev/null \
 BH_VERSION="$(cat "$RESOURCES/VERSION" 2>/dev/null || echo "unknown")"
 BUILD_DATE="$(date -u +%Y-%m-%d)"
 
-cat > "$RESOURCES/NOTICE.txt" << NOTICE
-WaveCast ${CHANNELS}ch virtual audio driver
-============================================
-
-This driver is a MODIFIED version of BlackHole, a virtual audio loopback
-driver by Existential Audio Inc.
-
-  Upstream:  https://github.com/ExistentialAudio/BlackHole
-  Based on:  BlackHole ${BH_VERSION} (commit ${BH_COMMIT})
-
-BlackHole is free software licensed under the GNU General Public License,
-version 3. A verbatim copy of that license is included alongside this file
-as "LICENSE". This modified version is likewise distributed under GPL-3.0.
-
-Modifications made by WaveCast (last changed ${BUILD_DATE})
-----------------------------------------------------------
-The source files themselves are unmodified; the following changes are applied
-at build time via compiler defines and Info.plist edits (see build_driver.sh
-in the corresponding source):
-
-  * Device / driver display name set to "WaveCast ${CHANNELS}ch".
-  * Bundle identifier set to "${BUNDLE_ID}".
-  * Channel count fixed at ${CHANNELS} (stereo).
-  * Nominal sample rate locked to 48000 Hz (kSampleRates).
-  * Bundle icon replaced with the WaveCast icon.
-  * CoreAudio plug-in factory UUID replaced with a WaveCast-specific UUID.
-
-Corresponding source (GPL-3.0 §6)
----------------------------------
-The complete corresponding source for this driver — the exact BlackHole
-commit above plus the build script that produces this binary — is available
-at:
-
-  ${SOURCE_URL}
-
-The WaveCast application that uses this driver is a separate, independent
-program. It communicates with this driver only through the public Core Audio
-HAL API and is not a derivative work of BlackHole.
-NOTICE
+NOTICE_TEMPLATE="$PACKAGING_DIR/Assets/NOTICE.template.txt"
+if [ ! -f "$NOTICE_TEMPLATE" ]; then
+    echo "ERROR: $NOTICE_TEMPLATE missing."
+    exit 1
+fi
+# Render the @VAR@ placeholders in the template. '|' delimiter keeps the URL's
+# slashes intact; sed is used instead of envsubst, which is not present on a
+# stock macOS install.
+sed \
+    -e "s|@CHANNELS@|${CHANNELS}|g" \
+    -e "s|@BUNDLE_ID@|${BUNDLE_ID}|g" \
+    -e "s|@BH_VERSION@|${BH_VERSION}|g" \
+    -e "s|@BH_COMMIT@|${BH_COMMIT}|g" \
+    -e "s|@BUILD_DATE@|${BUILD_DATE}|g" \
+    -e "s|@SOURCE_URL@|${SOURCE_URL}|g" \
+    "$NOTICE_TEMPLATE" > "$RESOURCES/NOTICE.txt"
 
 # ── Sign ──────────────────────────────────────────────────────────────────────
 echo "Signing with: $SIGN_IDENTITY"

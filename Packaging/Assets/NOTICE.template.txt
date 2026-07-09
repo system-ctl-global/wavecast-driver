@@ -1,0 +1,37 @@
+WaveCast @CHANNELS@ch virtual audio driver
+============================================
+
+This driver is a MODIFIED version of BlackHole, a virtual audio loopback
+driver by Existential Audio Inc.
+
+  Upstream:  https://github.com/ExistentialAudio/BlackHole
+  Based on:  BlackHole @BH_VERSION@ (commit @BH_COMMIT@)
+
+BlackHole is free software licensed under the GNU General Public License,
+version 3. A verbatim copy of that license is included alongside this file
+as "LICENSE". This modified version is likewise distributed under GPL-3.0.
+
+Modifications made by WaveCast (last changed @BUILD_DATE@)
+----------------------------------------------------------
+The source files themselves are unmodified; the following changes are applied
+at build time via compiler defines and Info.plist edits (see build_driver.sh
+in the corresponding source):
+
+  * Device / driver display name set to "WaveCast @CHANNELS@ch".
+  * Bundle identifier set to "@BUNDLE_ID@".
+  * Channel count fixed at @CHANNELS@ (stereo).
+  * Nominal sample rate locked to 48000 Hz (kSampleRates).
+  * Bundle icon replaced with the WaveCast icon.
+  * CoreAudio plug-in factory UUID replaced with a WaveCast-specific UUID.
+
+Corresponding source (GPL-3.0 §6)
+---------------------------------
+The complete corresponding source for this driver — the exact BlackHole
+commit above plus the build script that produces this binary — is available
+at:
+
+  @SOURCE_URL@
+
+The WaveCast application that uses this driver is a separate, independent
+program. It communicates with this driver only through the public Core Audio
+HAL API and is not a derivative work of BlackHole.
