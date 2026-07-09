@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# build_driver.sh — Build and rebrand BlackHole as WaveCast 2Ch driver.
+# build_driver.sh — Build and rebrand BlackHole as the 16-channel WaveCast driver.
 #
 # Run from the repo root:
 #   ./Packaging/build_driver.sh
 #
-# Output: Packaging/WaveCast2Ch.driver  (ready to embed in the app bundle)
+# Output: Packaging/WaveCast.driver  (ready to embed in the app bundle)
 #
 # Prerequisites:
 #   - Xcode command-line tools installed
@@ -21,7 +21,7 @@ BLACKHOLE_PROJ="$REPO_ROOT/Vendor/BlackHole/BlackHole.xcodeproj"
 PACKAGING_DIR="$REPO_ROOT/Packaging"
 UUID_FILE="$PACKAGING_DIR/wavecast2ch.uuid"
 ICON_FILE="$PACKAGING_DIR/WaveCast.icns"
-OUT_DRIVER="$PACKAGING_DIR/WaveCast2Ch.driver"
+OUT_DRIVER="$PACKAGING_DIR/WaveCast.driver"
 BUILD_DIR="$PACKAGING_DIR/_build"
 
 # ── Identity ────────────────────────────────────────────────────────────────
@@ -36,8 +36,8 @@ PKG_SIGN_IDENTITY="${PKG_SIGN_IDENTITY:-}"
 
 # ── WaveCast-specific defines ────────────────────────────────────────────────
 DRIVER_NAME="WaveCast"
-CHANNELS=2
-BUNDLE_ID="com.wavecast.driver.2ch"
+CHANNELS=16
+BUNDLE_ID="com.wavecast.driver"
 
 # GPL-3.0 corresponding-source location (§6(d)). The public repo MUST host the
 # exact BlackHole commit shipped below plus this build_driver.sh, and MUST stay
@@ -74,9 +74,9 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
 # GCC_PREPROCESSOR_DEFINITIONS overrides let us rebrand without touching source.
-# kDriver_Name  → device appears as "WaveCast 2ch" in macOS
+# kDriver_Name  → device appears as "WaveCast" in macOS
 # kPlugIn_BundleID → bundle identifier baked into the driver binary
-# kNumber_Of_Channels → 2 (stereo)
+# kNumber_Of_Channels → 16 (multichannel bed)
 #
 # CODE_SIGN_IDENTITY="" + CODE_SIGNING_REQUIRED=NO skips Xcode's built-in signing
 # so we can sign with our own identity immediately after the build.
@@ -233,7 +233,7 @@ if [ -n "$PKG_SIGN_IDENTITY" ]; then
     pkgbuild \
         --root "$PKG_STAGING" \
         --scripts "$PKG_SCRIPTS" \
-        --identifier "com.wavecast.driver.2ch.pkg" \
+        --identifier "com.wavecast.driver.pkg" \
         --version "1.0" \
         --sign "$PKG_SIGN_IDENTITY" \
         "$COMPONENT_PKG"
@@ -241,7 +241,7 @@ else
     pkgbuild \
         --root "$PKG_STAGING" \
         --scripts "$PKG_SCRIPTS" \
-        --identifier "com.wavecast.driver.2ch.pkg" \
+        --identifier "com.wavecast.driver.pkg" \
         --version "1.0" \
         "$COMPONENT_PKG"
 fi
@@ -307,14 +307,14 @@ cat > "$DIST_XML" << EOF
     <options customize="never" require-scripts="false" rootVolumeOnly="true"/>
     <choices-outline>
         <line choice="default">
-            <line choice="com.wavecast.driver.2ch.pkg"/>
+            <line choice="com.wavecast.driver.pkg"/>
         </line>
     </choices-outline>
     <choice id="default"/>
-    <choice id="com.wavecast.driver.2ch.pkg" visible="false">
-        <pkg-ref id="com.wavecast.driver.2ch.pkg"/>
+    <choice id="com.wavecast.driver.pkg" visible="false">
+        <pkg-ref id="com.wavecast.driver.pkg"/>
     </choice>
-    <pkg-ref id="com.wavecast.driver.2ch.pkg" version="1.0" onConclusion="none">$COMPONENT_BASENAME</pkg-ref>
+    <pkg-ref id="com.wavecast.driver.pkg" version="1.0" onConclusion="none">$COMPONENT_BASENAME</pkg-ref>
 </installer-gui-script>
 EOF
 
