@@ -74,7 +74,8 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
 # GCC_PREPROCESSOR_DEFINITIONS overrides let us rebrand without touching source.
-# kDriver_Name  → device appears as "WaveCast" in macOS
+# kDriver_Name  → box/plugin name baked into the driver binary
+# kDevice_Name  → audio device display name;
 # kPlugIn_BundleID → bundle identifier baked into the driver binary
 # kNumber_Of_Channels → 16 (multichannel bed)
 #
@@ -97,6 +98,7 @@ DEBUG=0 \
 kNumber_Of_Channels=$CHANNELS \
 kPlugIn_BundleID='\"$BUNDLE_ID\"' \
 kDriver_Name='\"$DRIVER_NAME\"' \
+kDevice_Name='\"$DRIVER_NAME\"' \
 kPlugIn_Icon='\"WaveCast.icns\"' \
 kSampleRates=48000" \
     2>&1 | grep -E "^(Build|CompileC|error:|warning:)" || true
