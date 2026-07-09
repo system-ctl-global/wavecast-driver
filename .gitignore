@@ -1,0 +1,14 @@
+# Driver build output (redirected here via SYMROOT/OBJROOT/derivedDataPath)
+Packaging/_build/
+
+# Intermediate packaging staging + resources
+Packaging/_pkg_staging/
+Packaging/_pkg_resources/
+Packaging/_WaveCastDriverComponent.pkg
+Packaging/_distribution.xml
+
+# Built driver + PKG are artefacts (regenerate with build_driver.sh)
+Packaging/WaveCast.driver/
+Packaging/WaveCastDriver.pkg
+
+.DS_Store
