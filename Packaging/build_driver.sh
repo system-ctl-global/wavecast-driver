@@ -350,9 +350,7 @@ echo "Done: $FINAL_PKG"
 if [ -n "$APP_BUNDLE_RES_DIR" ]; then
     mkdir -p "$APP_BUNDLE_RES_DIR"
     cp "$FINAL_PKG" "$APP_BUNDLE_RES_DIR/WaveCastDriver.pkg"
-    cp "$PACKAGING_DIR/Assets/wavecast_icon.png" "$APP_BUNDLE_RES_DIR/wavecast_icon.png"
     echo "Bundled: $APP_BUNDLE_RES_DIR/WaveCastDriver.pkg"
-    echo "Icon:    $APP_BUNDLE_RES_DIR/wavecast_icon.png"
 else
     echo "(APP_BUNDLE_RES_DIR unset — skipped copy into app tree)"
 fi
